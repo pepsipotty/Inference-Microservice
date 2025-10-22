@@ -50,20 +50,26 @@ class BaseModelManager:
             logger.error(f"Failed to load base model: {e}")
             raise
 
-    def generate(self, prompt: str, max_new_tokens: int = 200, temperature: float = 0.7, top_p: float = 0.9) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 200, temperature: float = 0.7, top_p: float = 0.9, repetition_penalty: float = 1.0, no_repeat_ngram_size: int = 0) -> str:
         try:
             inputs = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
+            gen_kwargs = {
+                "max_new_tokens": max_new_tokens,
+                "temperature": temperature,
+                "do_sample": True,
+                "top_p": top_p,
+                "pad_token_id": self.tokenizer.eos_token_id
+            }
+
+            if repetition_penalty > 1.0:
+                gen_kwargs["repetition_penalty"] = repetition_penalty
+            if no_repeat_ngram_size > 0:
+                gen_kwargs["no_repeat_ngram_size"] = no_repeat_ngram_size
+
             with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                    do_sample=True,
-                    top_p=top_p,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
+                outputs = self.model.generate(**inputs, **gen_kwargs)
 
             input_length = inputs['input_ids'].shape[1]
             generated_tokens = outputs[0][input_length:]
@@ -138,7 +144,7 @@ class FineTunedModelManager:
             self.current_model_id = None
             raise
 
-    def generate(self, prompt: str, max_new_tokens: int = 200, temperature: float = 0.7, top_p: float = 0.9) -> str:
+    def generate(self, prompt: str, max_new_tokens: int = 200, temperature: float = 0.7, top_p: float = 0.9, repetition_penalty: float = 1.0, no_repeat_ngram_size: int = 0) -> str:
         if self.model is None:
             raise RuntimeError("No model loaded. Call load_model() first.")
 
@@ -146,15 +152,21 @@ class FineTunedModelManager:
             inputs = self.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
 
+            gen_kwargs = {
+                "max_new_tokens": max_new_tokens,
+                "temperature": temperature,
+                "do_sample": True,
+                "top_p": top_p,
+                "pad_token_id": self.tokenizer.eos_token_id
+            }
+
+            if repetition_penalty > 1.0:
+                gen_kwargs["repetition_penalty"] = repetition_penalty
+            if no_repeat_ngram_size > 0:
+                gen_kwargs["no_repeat_ngram_size"] = no_repeat_ngram_size
+
             with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=max_new_tokens,
-                    temperature=temperature,
-                    do_sample=True,
-                    top_p=top_p,
-                    pad_token_id=self.tokenizer.eos_token_id
-                )
+                outputs = self.model.generate(**inputs, **gen_kwargs)
 
             input_length = inputs['input_ids'].shape[1]
             generated_tokens = outputs[0][input_length:]

@@ -30,8 +30,6 @@ class BaseModelManager:
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
 
-            if "<|stop|>" not in self.tokenizer.get_vocab():
-                self.tokenizer.add_tokens(["<|stop|>"])
             self.stop_token_id = self.tokenizer.encode("<|stop|>")[0]
 
             self.model = AutoModelForCausalLM.from_pretrained(
@@ -100,8 +98,6 @@ class FineTunedModelManager:
         self.model = None
         self.current_model_id = None
 
-        if "<|stop|>" not in self.tokenizer.get_vocab():
-            self.tokenizer.add_tokens(["<|stop|>"])
         self.stop_token_id = self.tokenizer.encode("<|stop|>")[0]
 
         logger.info("FineTunedModelManager initialized")

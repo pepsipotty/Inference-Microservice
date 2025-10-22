@@ -13,6 +13,7 @@ from typing import Optional
 from models import InferenceRequest, InferenceResponse, ErrorResponse, HealthResponse
 from firebase_client import FirebaseStorageClient, ModelNotFoundError, StorageConnectionError
 from model_manager import BaseModelManager, FineTunedModelManager
+import rag_retriever
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,6 +67,13 @@ async def lifespan(_app: FastAPI):
             base_tokenizer=base_model_manager.tokenizer,
             device=device
         )
+
+        logger.info("Initializing RAG retriever...")
+        rag_enabled = rag_retriever.initialize()
+        if rag_enabled:
+            logger.info("RAG retriever initialized successfully")
+        else:
+            logger.warning("RAG disabled - PINECONE_API_KEY not set")
 
         logger.info("=" * 60)
         logger.info("Inference Microservice Ready")
@@ -173,9 +181,35 @@ async def run_inference(
         repetition_penalty = float(os.getenv("REPETITION_PENALTY", "1.5"))
         no_repeat_ngram_size = int(os.getenv("NO_REPEAT_NGRAM_SIZE", "3"))
 
-        # Format prompt for instruction-tuned model
-        qa_prompt = f"Question: {request.prompt}\nAnswer:"
-        logger.debug(f"Request {request_id}: Using instruction Q&A format")
+        try:
+            kb_name = request.modelId.replace('.pt', '').split('_')[1]
+            logger.debug(f"Request {request_id}: Extracted KB name: {kb_name}")
+
+            context_results = rag_retriever.search(
+                query=request.prompt,
+                namespace=kb_name,
+                top_k=3
+            )
+
+            if context_results:
+                formatted_context = ""
+                for i, item in enumerate(context_results, 1):
+                    formatted_context += f"[Source {i}] (Community votes: N/A)\n"
+                    formatted_context += f"Q: {item['question']}\n"
+                    formatted_context += f"A: {item['answer']}\n\n"
+
+                qa_prompt = f"""Based on this knowledge:
+
+{formatted_context}Question: {request.prompt}
+Answer:"""
+                logger.info(f"Request {request_id}: Retrieved {len(context_results)} context items from '{kb_name}'")
+            else:
+                qa_prompt = f"Question: {request.prompt}\nAnswer:"
+                logger.debug(f"Request {request_id}: No context retrieved, using original prompt")
+
+        except Exception as e:
+            logger.warning(f"Request {request_id}: RAG failed - {e}")
+            qa_prompt = f"Question: {request.prompt}\nAnswer:"
 
         # Run base model
         logger.info(f"Request {request_id}: Running base model...")

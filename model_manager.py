@@ -100,6 +100,10 @@ class FineTunedModelManager:
             logger.info(f"Loading checkpoint from: {model_path}")
             checkpoint = torch.load(model_path, map_location=self.device)
 
+            # Extract model weights from state key if present
+            if isinstance(checkpoint, dict) and "state" in checkpoint:
+                checkpoint = checkpoint["state"]
+
             # Handle different checkpoint formats
             if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
                 self.model = AutoModelForCausalLM.from_pretrained(

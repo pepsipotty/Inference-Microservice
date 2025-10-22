@@ -30,6 +30,10 @@ class BaseModelManager:
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
 
+            if "<|stop|>" not in self.tokenizer.get_vocab():
+                self.tokenizer.add_tokens(["<|stop|>"])
+            self.stop_token_id = self.tokenizer.encode("<|stop|>")[0]
+
             self.model = AutoModelForCausalLM.from_pretrained(
                 self.model_name,
                 torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
@@ -60,7 +64,8 @@ class BaseModelManager:
                 "temperature": temperature,
                 "do_sample": True,
                 "top_p": top_p,
-                "pad_token_id": self.tokenizer.eos_token_id
+                "pad_token_id": self.tokenizer.eos_token_id,
+                "eos_token_id": self.stop_token_id
             }
 
             if repetition_penalty > 1.0:
@@ -74,8 +79,9 @@ class BaseModelManager:
             input_length = inputs['input_ids'].shape[1]
             generated_tokens = outputs[0][input_length:]
             output_text = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            output_text = output_text.replace("<|stop|>", "").strip()
 
-            return output_text.strip()
+            return output_text
 
         except Exception as e:
             logger.error(f"Base model generation failed: {e}")
@@ -93,6 +99,10 @@ class FineTunedModelManager:
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model = None
         self.current_model_id = None
+
+        if "<|stop|>" not in self.tokenizer.get_vocab():
+            self.tokenizer.add_tokens(["<|stop|>"])
+        self.stop_token_id = self.tokenizer.encode("<|stop|>")[0]
 
         logger.info("FineTunedModelManager initialized")
 
@@ -157,7 +167,8 @@ class FineTunedModelManager:
                 "temperature": temperature,
                 "do_sample": True,
                 "top_p": top_p,
-                "pad_token_id": self.tokenizer.eos_token_id
+                "pad_token_id": self.tokenizer.eos_token_id,
+                "eos_token_id": self.stop_token_id
             }
 
             if repetition_penalty > 1.0:
@@ -171,8 +182,9 @@ class FineTunedModelManager:
             input_length = inputs['input_ids'].shape[1]
             generated_tokens = outputs[0][input_length:]
             output_text = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            output_text = output_text.replace("<|stop|>", "").strip()
 
-            return output_text.strip()
+            return output_text
 
         except Exception as e:
             logger.error(f"Fine-tuned model generation failed: {e}")

@@ -13,7 +13,6 @@ from typing import Optional
 from models import InferenceRequest, InferenceResponse, ErrorResponse, HealthResponse
 from firebase_client import FirebaseStorageClient, ModelNotFoundError, StorageConnectionError
 from model_manager import BaseModelManager, FineTunedModelManager
-from prompt_formatter import PromptFormatter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -174,16 +173,14 @@ async def run_inference(
         repetition_penalty = float(os.getenv("REPETITION_PENALTY", "1.3"))
         no_repeat_ngram_size = int(os.getenv("NO_REPEAT_NGRAM_SIZE", "3"))
 
-        # Apply prompt formatting
-        original_prompt = request.prompt
-        formatted_prompt = PromptFormatter.format_for_generation(original_prompt)
-        if PromptFormatter.should_log_transformation(original_prompt, formatted_prompt):
-            logger.info(f"Request {request_id}: Prompt transformed: '{original_prompt}' -> '{formatted_prompt}'")
+        # Format prompt for instruction-tuned model
+        qa_prompt = f"Question: {request.prompt}\nAnswer:"
+        logger.debug(f"Request {request_id}: Using instruction Q&A format")
 
         # Run base model
         logger.info(f"Request {request_id}: Running base model...")
         base_output = base_model_manager.generate(
-            prompt=formatted_prompt,
+            prompt=qa_prompt,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_p=top_p,
@@ -221,7 +218,7 @@ async def run_inference(
 
         logger.info(f"Request {request_id}: Running fine-tuned model...")
         finetuned_output = finetuned_model_manager.generate(
-            prompt=formatted_prompt,
+            prompt=qa_prompt,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_p=top_p,

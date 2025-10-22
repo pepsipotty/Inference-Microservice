@@ -167,10 +167,10 @@ async def run_inference(
                 ).model_dump()
             )
 
-        max_new_tokens = int(os.getenv("MAX_NEW_TOKENS", "200"))
-        temperature = float(os.getenv("TEMPERATURE", "0.7"))
-        top_p = float(os.getenv("TOP_P", "0.9"))
-        repetition_penalty = float(os.getenv("REPETITION_PENALTY", "1.3"))
+        max_new_tokens = int(os.getenv("MAX_NEW_TOKENS", "50"))
+        temperature = float(os.getenv("TEMPERATURE", "0.1"))
+        top_p = float(os.getenv("TOP_P", "0.85"))
+        repetition_penalty = float(os.getenv("REPETITION_PENALTY", "1.5"))
         no_repeat_ngram_size = int(os.getenv("NO_REPEAT_NGRAM_SIZE", "3"))
 
         # Format prompt for instruction-tuned model

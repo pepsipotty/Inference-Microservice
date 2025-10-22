@@ -79,6 +79,16 @@ class BaseModelManager:
             output_text = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
             output_text = output_text.replace("<|stop|>", "").strip()
 
+            # Truncate at last complete sentence
+            if not output_text.endswith(('.', '!', '?')):
+                last_period = output_text.rfind('.')
+                last_exclaim = output_text.rfind('!')
+                last_question = output_text.rfind('?')
+                last_boundary = max(last_period, last_exclaim, last_question)
+
+                if last_boundary > 0:
+                    output_text = output_text[:last_boundary + 1]
+
             return output_text
 
         except Exception as e:
@@ -188,6 +198,16 @@ class FineTunedModelManager:
             generated_tokens = outputs[0][input_length:]
             output_text = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
             output_text = output_text.replace("<|stop|>", "").strip()
+
+            # Truncate at last complete sentence
+            if not output_text.endswith(('.', '!', '?')):
+                last_period = output_text.rfind('.')
+                last_exclaim = output_text.rfind('!')
+                last_question = output_text.rfind('?')
+                last_boundary = max(last_period, last_exclaim, last_question)
+
+                if last_boundary > 0:
+                    output_text = output_text[:last_boundary + 1]
 
             return output_text
 

@@ -132,7 +132,16 @@ class FineTunedModelManager:
                     torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
                     low_cpu_mem_usage=True
                 )
-                self.model.load_state_dict(checkpoint)
+
+            # Resize model if vocab size mismatch
+            checkpoint_vocab = checkpoint['gpt_neox.embed_in.weight'].shape[0]
+            model_vocab = self.model.get_input_embeddings().weight.shape[0]
+
+            if checkpoint_vocab != model_vocab:
+                logger.info(f"Resizing model from {model_vocab} to {checkpoint_vocab} tokens")
+                self.model.resize_token_embeddings(checkpoint_vocab)
+                
+            self.model.load_state_dict(checkpoint)
 
             self.model.to(self.device)
             self.model.eval()

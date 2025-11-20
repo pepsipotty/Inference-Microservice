@@ -21,6 +21,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# System prompt to help DPO-trained model show its capabilities
+DPO_SYSTEM_PROMPT = os.getenv(
+    "DPO_SYSTEM_PROMPT",
+    "You are a helpful, accurate, and polite assistant. Provide clear, well-structured answers that directly address the question.\n\n"
+)
+
 base_model_manager: Optional[BaseModelManager] = None
 finetuned_model_manager: Optional[FineTunedModelManager] = None
 firebase_client: Optional[FirebaseStorageClient] = None
@@ -181,6 +187,10 @@ async def run_inference(
         repetition_penalty = float(os.getenv("REPETITION_PENALTY", "1.5"))
         no_repeat_ngram_size = int(os.getenv("NO_REPEAT_NGRAM_SIZE", "3"))
 
+        # Prepare prompts (with and without RAG)
+        base_prompt = f"Question: {request.prompt}\nAnswer:"
+        qa_prompt_with_rag = base_prompt  # Default to base if RAG fails
+
         try:
             kb_name = request.modelId.replace('.pt', '').split('_')[1]
             logger.debug(f"Request {request_id}: Extracted KB name: {kb_name}")
@@ -198,23 +208,21 @@ async def run_inference(
                     formatted_context += f"Q: {item['question']}\n"
                     formatted_context += f"A: {item['answer']}\n\n"
 
-                qa_prompt = f"""Based on this knowledge:
+                qa_prompt_with_rag = f"""Based on this knowledge:
 
 {formatted_context}Question: {request.prompt}
 Answer:"""
                 logger.info(f"Request {request_id}: Retrieved {len(context_results)} context items from '{kb_name}'")
             else:
-                qa_prompt = f"Question: {request.prompt}\nAnswer:"
                 logger.debug(f"Request {request_id}: No context retrieved, using original prompt")
 
         except Exception as e:
             logger.warning(f"Request {request_id}: RAG failed - {e}")
-            qa_prompt = f"Question: {request.prompt}\nAnswer:"
 
-        # Run base model
-        logger.info(f"Request {request_id}: Running base model...")
+        # PART 1: Run base model (no RAG)
+        logger.info(f"Request {request_id}: Running base model (no RAG)...")
         base_output = base_model_manager.generate(
-            prompt=qa_prompt,
+            prompt=base_prompt,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_p=top_p,
@@ -222,7 +230,7 @@ Answer:"""
             no_repeat_ngram_size=no_repeat_ngram_size
         )
 
-        # Load and run fine-tuned model
+        # PART 2 & 3: Load fine-tuned model once, run twice
         logger.info(f"Request {request_id}: Loading fine-tuned model...")
         try:
             model_path = firebase_client.download_model(request.modelId)
@@ -250,9 +258,22 @@ Answer:"""
                 ).model_dump()
             )
 
-        logger.info(f"Request {request_id}: Running fine-tuned model...")
-        finetuned_output = finetuned_model_manager.generate(
-            prompt=qa_prompt,
+        # PART 2: Run fine-tuned model (no RAG) with system prompt
+        logger.info(f"Request {request_id}: Running fine-tuned model (no RAG with system prompt)...")
+        dpo_prompt = f"{DPO_SYSTEM_PROMPT}Question: {request.prompt}\nAnswer:"
+        finetuned_output_no_rag = finetuned_model_manager.generate(
+            prompt=dpo_prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size
+        )
+
+        # PART 3: Run fine-tuned model (with RAG)
+        logger.info(f"Request {request_id}: Running fine-tuned model (with RAG)...")
+        finetuned_output_with_rag = finetuned_model_manager.generate(
+            prompt=qa_prompt_with_rag,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
             top_p=top_p,
@@ -268,7 +289,8 @@ Answer:"""
         return InferenceResponse(
             requestId=request_id,
             baseModelOutput=base_output,
-            fineTunedOutput=finetuned_output,
+            fineTunedOutputNoRAG=finetuned_output_no_rag,
+            fineTunedOutput=finetuned_output_with_rag,
             modelId=request.modelId,
             executionTimeMs=round(total_time, 2),
             timestamp=datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')

@@ -27,6 +27,7 @@ class InferenceRequest(BaseModel):
 class InferenceResponse(BaseModel):
     requestId: str
     baseModelOutput: str
+    fineTunedOutputNoRAG: str
     fineTunedOutput: str
     modelId: str
     executionTimeMs: float

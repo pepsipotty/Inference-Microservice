@@ -9,11 +9,14 @@ from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Optional
+from dotenv import load_dotenv
 
 from models import InferenceRequest, InferenceResponse, ErrorResponse, HealthResponse
 from firebase_client import FirebaseStorageClient, ModelNotFoundError, StorageConnectionError
 from model_manager import BaseModelManager, FineTunedModelManager
 import rag_retriever
+
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
